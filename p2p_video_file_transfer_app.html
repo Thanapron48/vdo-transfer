@@ -1,0 +1,575 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AirBeam - Direct P2P Lossless Video & File Transfer</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#f0f7ff',
+                            100: '#e0effe',
+                            500: '#3b82f6',
+                            600: '#2563eb',
+                            700: '#1d4ed8',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- PeerJS for WebRTC -->
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
+    <!-- QR Code Library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <style>
+        .glass {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .light .glass {
+            background: rgba(255, 255, 255, 0.7);
+            border: 1px solid rgba(0, 0, 0, 0.1);
+        }
+    </style>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen transition-colors duration-300 font-sans antialiased light:bg-slate-50 light:text-slate-800">
+
+    <div class="max-w-4xl mx-auto px-4 py-6 md:py-10 flex flex-col min-h-screen">
+        
+        <!-- Header -->
+        <header class="flex justify-between items-center mb-8 pb-4 border-b border-slate-800 light:border-slate-200">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-500 flex items-center justify-center text-white shadow-lg shadow-blue-500/30">
+                    <i class="fa-solid fa-bolt text-xl"></i>
+                </div>
+                <div>
+                    <h1 class="text-xl font-bold tracking-tight">AirBeam P2P</h1>
+                    <p class="text-xs text-slate-400 light:text-slate-500">Lossless iPad ↔ Windows Direct Transfer</p>
+                </div>
+            </div>
+            
+            <div class="flex items-center gap-3">
+                <button id="themeToggleBtn" class="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 light:bg-slate-200 light:hover:bg-slate-300 text-slate-300 light:text-slate-700 transition">
+                    <i class="fa-solid fa-moon dark:hidden"></i>
+                    <i class="fa-solid fa-sun hidden dark:block"></i>
+                </button>
+            </div>
+        </header>
+
+        <!-- Main Grid Layout -->
+        <main class="grid grid-cols-1 md:grid-cols-12 gap-6 flex-grow">
+            
+            <!-- Connection Control Panel (Left/Top) -->
+            <section class="md:col-span-5 flex flex-col gap-5">
+                
+                <!-- My ID Card -->
+                <div class="p-5 rounded-2xl glass bg-slate-800/50 light:bg-white shadow-xl relative overflow-hidden">
+                    <div class="flex justify-between items-start mb-3">
+                        <span class="text-xs font-semibold uppercase tracking-wider text-slate-400">Your Device ID</span>
+                        <div id="statusBadge" class="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                            <span class="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+                            Initializing...
+                        </div>
+                    </div>
+
+                    <div class="flex items-center gap-2 mb-4">
+                        <input id="myIdInput" type="text" readonly value="Generating..." class="w-full bg-slate-950/50 light:bg-slate-100 font-mono text-sm px-3 py-2 rounded-xl text-blue-400 light:text-blue-600 border border-slate-700/50 light:border-slate-300 focus:outline-none">
+                        <button id="copyIdBtn" title="Copy ID" class="p-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-white transition active:scale-95">
+                            <i class="fa-regular fa-copy"></i>
+                        </button>
+                    </div>
+
+                    <!-- QR Code Toggle / Container -->
+                    <div class="flex flex-col items-center justify-center p-3 rounded-xl bg-white light:bg-slate-100 border border-slate-200">
+                        <div id="qrcode" class="p-1"></div>
+                        <p class="text-[11px] text-slate-500 mt-2 font-medium">Scan with iPad camera to open & connect</p>
+                    </div>
+                </div>
+
+                <!-- Connect to Peer Form -->
+                <div class="p-5 rounded-2xl glass bg-slate-800/50 light:bg-white shadow-xl">
+                    <h2 class="text-sm font-semibold mb-3 flex items-center gap-2">
+                        <i class="fa-solid fa-link text-blue-500"></i> Connect to Remote Device
+                    </h2>
+                    <div class="space-y-3">
+                        <div>
+                            <label for="peerIdInput" class="block text-xs text-slate-400 mb-1">Target Device ID or Paste Link</label>
+                            <input id="peerIdInput" type="text" placeholder="e.g. airbeam-1234" class="w-full bg-slate-900 light:bg-slate-50 border border-slate-700 light:border-slate-300 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:border-blue-500 transition">
+                        </div>
+                        <button id="connectBtn" class="w-full py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-medium rounded-xl text-sm transition shadow-lg shadow-blue-600/20 active:scale-95 flex items-center justify-center gap-2">
+                            <i class="fa-solid fa-plug"></i> Connect Peer
+                        </button>
+                    </div>
+                </div>
+
+                <!-- How it works info box -->
+                <div class="p-4 rounded-xl bg-blue-950/20 light:bg-blue-50 border border-blue-900/30 light:border-blue-200 text-xs text-blue-300 light:text-blue-800 space-y-1.5">
+                    <p class="font-semibold flex items-center gap-1.5">
+                        <i class="fa-solid fa-shield-halved"></i> 100% Private & Uncompressed
+                    </p>
+                    <p class="text-blue-400 light:text-blue-600 leading-relaxed">
+                        Data flows directly over your local Wi-Fi via WebRTC Data Channels. No files touch any servers. Full 4K/60fps original video quality preserved!
+                    </p>
+                </div>
+
+            </section>
+
+            <!-- File Transfer & Player Panel (Right/Bottom) -->
+            <section class="md:col-span-7 flex flex-col gap-5">
+                
+                <!-- Main Transfer Card -->
+                <div class="p-6 rounded-2xl glass bg-slate-800/50 light:bg-white shadow-xl flex-grow flex flex-col justify-between">
+                    <div>
+                        <h2 class="text-base font-semibold mb-4 flex items-center justify-between">
+                            <span class="flex items-center gap-2">
+                                <i class="fa-solid fa-paper-plane text-blue-500"></i> Direct File Transfer
+                            </span>
+                            <span id="transferStatusText" class="text-xs font-normal text-slate-400">Ready</span>
+                        </h2>
+
+                        <!-- Drag & Drop Zone -->
+                        <div id="dropZone" class="border-2 border-dashed border-slate-700 light:border-slate-300 hover:border-blue-500 light:hover:border-blue-500 rounded-2xl p-8 text-center bg-slate-900/40 light:bg-slate-50 transition cursor-pointer group mb-6">
+                            <input type="file" id="fileInput" class="hidden" multiple>
+                            <div class="w-16 h-16 mx-auto mb-3 rounded-full bg-slate-800 light:bg-slate-200 flex items-center justify-center text-blue-400 group-hover:scale-110 transition">
+                                <i class="fa-solid fa-file-video text-2xl"></i>
+                            </div>
+                            <p class="text-sm font-medium text-slate-200 light:text-slate-700 mb-1">
+                                Click or Drag & Drop Video / File
+                            </p>
+                            <p class="text-xs text-slate-400 light:text-slate-500">
+                                Supports high-bitrate MP4, MOV, MKV, ProRes, etc.
+                            </p>
+                        </div>
+
+                        <!-- Progress Bar & Details -->
+                        <div id="progressContainer" class="hidden space-y-3 bg-slate-900/80 light:bg-slate-100 p-4 rounded-xl border border-slate-800 light:border-slate-200">
+                            <div class="flex justify-between items-center text-xs">
+                                <span id="fileName" class="font-medium truncate max-w-[200px] sm:max-w-[300px]">video.mp4</span>
+                                <span id="progressPercent" class="font-bold text-blue-400">0%</span>
+                            </div>
+                            <!-- Progress Bar UI -->
+                            <div class="w-full bg-slate-800 light:bg-slate-300 h-2.5 rounded-full overflow-hidden">
+                                <div id="progressBar" class="bg-gradient-to-r from-blue-500 to-indigo-500 h-full w-0 transition-all duration-150"></div>
+                            </div>
+                            <div class="flex justify-between items-center text-[11px] text-slate-400 light:text-slate-500 font-mono">
+                                <span id="transferStats">0 MB / 0 MB</span>
+                                <span id="transferSpeed">0 MB/s</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Received Video Preview Section -->
+                    <div id="previewContainer" class="hidden mt-6 pt-5 border-t border-slate-800 light:border-slate-200 space-y-3">
+                        <div class="flex items-center justify-between">
+                            <h3 class="text-xs font-semibold uppercase tracking-wider text-slate-400">Video Preview</h3>
+                            <a id="downloadLink" class="text-xs text-blue-400 hover:underline flex items-center gap-1 font-medium" download>
+                                <i class="fa-solid fa-download"></i> Save to Computer
+                            </a>
+                        </div>
+                        <div class="rounded-xl overflow-hidden bg-black aspect-video flex items-center justify-center shadow-lg">
+                            <video id="videoPreview" controls class="w-full h-full max-h-[300px] object-contain"></video>
+                        </div>
+                    </div>
+
+                    <!-- Auto Download Toggle -->
+                    <div class="mt-6 pt-4 border-t border-slate-800/50 light:border-slate-200/60 flex items-center justify-between text-xs text-slate-400">
+                        <label for="autoDownloadToggle" class="flex items-center gap-2 cursor-pointer">
+                            <input type="checkbox" id="autoDownloadToggle" checked class="rounded bg-slate-800 border-slate-700 text-blue-600 focus:ring-blue-500 h-4 w-4">
+                            <span>Auto-download received files</span>
+                        </label>
+                        <span class="text-[11px] italic">No file size limit</span>
+                    </div>
+
+                </div>
+
+            </section>
+
+        </main>
+
+        <!-- Footer Toast / Notification Area -->
+        <div id="toast" class="fixed bottom-5 right-5 transform translate-y-20 opacity-0 transition-all duration-300 bg-slate-800 text-white px-4 py-3 rounded-xl shadow-2xl border border-slate-700 flex items-center gap-3 z-50">
+            <i id="toastIcon" class="fa-solid fa-circle-info text-blue-400"></i>
+            <span id="toastMsg" class="text-sm">Notification</span>
+        </div>
+
+    </div>
+
+    <!-- Application JavaScript Logic -->
+    <script>
+        // Constants & Configuration
+        const CHUNK_SIZE = 64 * 1024; // 64KB per WebRTC data chunk for high reliability & speed
+
+        // App State
+        let peer = null;
+        let conn = null;
+        let qrcodeObj = null;
+        let incomingFileData = {
+            name: '',
+            size: 0,
+            type: '',
+            receivedSize: 0,
+            chunks: []
+        };
+        let startTime = 0;
+
+        // DOM Elements
+        const themeToggleBtn = document.getElementById('themeToggleBtn');
+        const myIdInput = document.getElementById('myIdInput');
+        const copyIdBtn = document.getElementById('copyIdBtn');
+        const statusBadge = document.getElementById('statusBadge');
+        const peerIdInput = document.getElementById('peerIdInput');
+        const connectBtn = document.getElementById('connectBtn');
+        const dropZone = document.getElementById('dropZone');
+        const fileInput = document.getElementById('fileInput');
+        const progressContainer = document.getElementById('progressContainer');
+        const progressBar = document.getElementById('progressBar');
+        const progressPercent = document.getElementById('progressPercent');
+        const fileName = document.getElementById('fileName');
+        const transferStats = document.getElementById('transferStats');
+        const transferSpeed = document.getElementById('transferSpeed');
+        const transferStatusText = document.getElementById('transferStatusText');
+        const previewContainer = document.getElementById('previewContainer');
+        const videoPreview = document.getElementById('videoPreview');
+        const downloadLink = document.getElementById('downloadLink');
+        const autoDownloadToggle = document.getElementById('autoDownloadToggle');
+
+        // Initialize App
+        window.addEventListener('DOMContentLoaded', () => {
+            initPeer();
+            setupEventListeners();
+            checkUrlParams();
+        });
+
+        // Theme Switcher
+        themeToggleBtn.addEventListener('click', () => {
+            document.documentElement.classList.toggle('dark');
+        });
+
+        // Toast Notification Helper
+        function showToast(msg, iconClass = 'fa-solid fa-circle-info text-blue-400') {
+            const toast = document.getElementById('toast');
+            const toastMsg = document.getElementById('toastMsg');
+            const toastIcon = document.getElementById('toastIcon');
+            
+            toastMsg.innerText = msg;
+            toastIcon.className = iconClass;
+            
+            toast.classList.remove('translate-y-20', 'opacity-0');
+            setTimeout(() => {
+                toast.classList.add('translate-y-20', 'opacity-0');
+            }, 3500);
+        }
+
+        // Initialize PeerJS
+        function initPeer() {
+            // Generate short random ID prefix for easy typing
+            const randomId = 'airbeam-' + Math.random().toString(36).substring(2, 8);
+            
+            peer = new Peer(randomId, {
+                debug: 1
+            });
+
+            peer.on('open', (id) => {
+                myIdInput.value = id;
+                updateStatus('Ready', 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20', 'bg-emerald-400');
+                
+                // Generate QR Code containing connection link
+                const connectUrl = window.location.origin + window.location.pathname + '?peer=' + id;
+                generateQRCode(connectUrl);
+            });
+
+            peer.on('connection', (incomingConn) => {
+                conn = incomingConn;
+                setupConnectionListeners();
+                showToast('Device Connected!', 'fa-solid fa-circle-check text-emerald-400');
+            });
+
+            peer.on('error', (err) => {
+                console.error('PeerJS Error:', err);
+                showToast('Connection Error: ' + err.type, 'fa-solid fa-triangle-exclamation text-rose-400');
+                updateStatus('Error', 'bg-rose-500/10 text-rose-400 border-rose-500/20', 'bg-rose-400');
+            });
+        }
+
+        // Generate QR Code
+        function generateQRCode(text) {
+            const qrContainer = document.getElementById('qrcode');
+            qrContainer.innerHTML = '';
+            qrcodeObj = new QRCode(qrContainer, {
+                text: text,
+                width: 140,
+                height: 140,
+                colorDark : "#0f172a",
+                colorLight : "#ffffff",
+                correctLevel : QRCode.CorrectLevel.M
+            });
+        }
+
+        // Update Connection Status Badge
+        function updateStatus(text, badgeClasses, dotClass) {
+            statusBadge.className = `flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border ${badgeClasses}`;
+            statusBadge.innerHTML = `<span class="w-2 h-2 rounded-full ${dotClass}"></span> ${text}`;
+        }
+
+        // Check if URL contains peer parameter (for iPad scanning)
+        function checkUrlParams() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const peerParam = urlParams.get('peer');
+            if (peerParam) {
+                peerIdInput.value = peerParam;
+                // Wait for peer initialization then auto-connect
+                const checkInterval = setInterval(() => {
+                    if (peer && peer.open) {
+                        clearInterval(checkInterval);
+                        connectToPeer(peerParam);
+                    }
+                }, 300);
+            }
+        }
+
+        // Setup Event Listeners
+        function setupEventListeners() {
+            // Copy ID Button
+            copyIdBtn.addEventListener('click', () => {
+                const textToCopy = window.location.origin + window.location.pathname + '?peer=' + myIdInput.value;
+                document.execCommand('copy') || navigator.clipboard.writeText(textToCopy);
+                showToast('Link & ID Copied to Clipboard!');
+            });
+
+            // Connect Button
+            connectBtn.addEventListener('click', () => {
+                let targetId = peerIdInput.value.trim();
+                if (targetId.includes('?peer=')) {
+                    targetId = targetId.split('?peer=')[1];
+                }
+                if (targetId) {
+                    connectToPeer(targetId);
+                } else {
+                    showToast('Please enter a valid Peer ID', 'fa-solid fa-triangle-exclamation text-amber-400');
+                }
+            });
+
+            // Drag & Drop File Select
+            dropZone.addEventListener('click', () => fileInput.click());
+            
+            dropZone.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                dropZone.classList.add('border-blue-500', 'bg-blue-500/10');
+            });
+
+            dropZone.addEventListener('dragleave', () => {
+                dropZone.classList.remove('border-blue-500', 'bg-blue-500/10');
+            });
+
+            dropZone.addEventListener('drop', (e) => {
+                e.preventDefault();
+                dropZone.classList.remove('border-blue-500', 'bg-blue-500/10');
+                if (e.dataTransfer.files.length > 0) {
+                    handleFiles(e.dataTransfer.files);
+                }
+            });
+
+            fileInput.addEventListener('change', (e) => {
+                if (e.target.files.length > 0) {
+                    handleFiles(e.target.files);
+                }
+            });
+        }
+
+        // Connect to Target Peer
+        function connectToPeer(targetId) {
+            updateStatus('Connecting...', 'bg-amber-500/10 text-amber-400 border-amber-500/20', 'bg-amber-400 animate-pulse');
+            conn = peer.connect(targetId, { reliable: true });
+            setupConnectionListeners();
+        }
+
+        // WebRTC Data Connection Listeners
+        function setupConnectionListeners() {
+            conn.on('open', () => {
+                updateStatus('Connected', 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20', 'bg-emerald-400');
+                transferStatusText.innerText = 'Connected to Remote Peer';
+                showToast('Connected to device!', 'fa-solid fa-plug text-emerald-400');
+            });
+
+            conn.on('data', (data) => {
+                handleIncomingData(data);
+            });
+
+            conn.on('close', () => {
+                updateStatus('Disconnected', 'bg-rose-500/10 text-rose-400 border-rose-500/20', 'bg-rose-400');
+                transferStatusText.innerText = 'Peer Disconnected';
+                showToast('Peer Disconnected', 'fa-solid fa-circle-xmark text-rose-400');
+            });
+
+            conn.on('error', (err) => {
+                console.error('Connection Error:', err);
+                showToast('Transfer Connection Error', 'fa-solid fa-triangle-exclamation text-rose-400');
+            });
+        }
+
+        // Handle Selected Files for Sending
+        function handleFiles(files) {
+            if (!conn || !conn.open) {
+                showToast('Please connect to a device first!', 'fa-solid fa-triangle-exclamation text-amber-400');
+                return;
+            }
+
+            const file = files[0]; // Send first file
+            sendFile(file);
+        }
+
+        // Send File Function (Chunked WebRTC Direct Stream)
+        function sendFile(file) {
+            progressContainer.classList.remove('hidden');
+            fileName.innerText = file.name;
+            transferStatusText.innerText = 'Sending File...';
+            startTime = Date.now();
+
+            // 1. Send Header Info
+            conn.send({
+                type: 'header',
+                name: file.name,
+                size: file.size,
+                fileType: file.type
+            });
+
+            let offset = 0;
+            const reader = new FileReader();
+
+            reader.onload = (e) => {
+                if (!conn || !conn.open) return;
+
+                // Send Binary Chunk
+                conn.send({
+                    type: 'chunk',
+                    data: e.target.result
+                });
+
+                offset += e.target.result.byteLength;
+                
+                // Update Progress UI
+                const progress = Math.min((offset / file.size) * 100, 100);
+                progressBar.style.width = progress + '%';
+                progressPercent.innerText = progress.toFixed(1) + '%';
+                
+                const elapsedSeconds = (Date.now() - startTime) / 1000;
+                const speedMBps = elapsedSeconds > 0 ? ((offset / (1024 * 1024)) / elapsedSeconds).toFixed(2) : 0;
+                
+                transferStats.innerText = `${formatBytes(offset)} / ${formatBytes(file.size)}`;
+                transferSpeed.innerText = `${speedMBps} MB/s`;
+
+                if (offset < file.size) {
+                    // Backpressure check to prevent WebRTC buffer overflow
+                    if (conn.bufferSize > 16 * 1024 * 1024) { // 16MB threshold
+                        setTimeout(readNextChunk, 50);
+                    } else {
+                        readNextChunk();
+                    }
+                } else {
+                    // Send EOF
+                    conn.send({ type: 'eof' });
+                    transferStatusText.innerText = 'Transfer Complete!';
+                    showToast('File Sent Successfully!', 'fa-solid fa-circle-check text-emerald-400');
+                }
+            };
+
+            function readNextChunk() {
+                const slice = file.slice(offset, offset + CHUNK_SIZE);
+                reader.readAsArrayBuffer(slice);
+            }
+
+            readNextChunk();
+        }
+
+        // Handle Incoming WebRTC Data
+        function handleIncomingData(data) {
+            if (data.type === 'header') {
+                // Reset incoming buffer
+                incomingFileData = {
+                    name: data.name,
+                    size: data.size,
+                    type: data.fileType,
+                    receivedSize: 0,
+                    chunks: []
+                };
+                startTime = Date.now();
+                progressContainer.classList.remove('hidden');
+                fileName.innerText = data.name;
+                transferStatusText.innerText = 'Receiving File...';
+                previewContainer.classList.add('hidden');
+            } 
+            else if (data.type === 'chunk') {
+                incomingFileData.chunks.push(data.data);
+                incomingFileData.receivedSize += data.data.byteLength;
+
+                // Update UI
+                const progress = Math.min((incomingFileData.receivedSize / incomingFileData.size) * 100, 100);
+                progressBar.style.width = progress + '%';
+                progressPercent.innerText = progress.toFixed(1) + '%';
+
+                const elapsedSeconds = (Date.now() - startTime) / 1000;
+                const speedMBps = elapsedSeconds > 0 ? ((incomingFileData.receivedSize / (1024 * 1024)) / elapsedSeconds).toFixed(2) : 0;
+
+                transferStats.innerText = `${formatBytes(incomingFileData.receivedSize)} / ${formatBytes(incomingFileData.size)}`;
+                transferSpeed.innerText = `${speedMBps} MB/s`;
+            } 
+            else if (data.type === 'eof') {
+                transferStatusText.innerText = 'File Received!';
+                showToast('File Received Successfully!', 'fa-solid fa-file-circle-check text-emerald-400');
+
+                // Assemble Blob from received chunks
+                const blob = new Blob(incomingFileData.chunks, { type: incomingFileData.type || 'application/octet-stream' });
+                const blobUrl = URL.createObjectURL(blob);
+
+                // Setup Video Preview if it's a video file
+                if (incomingFileData.type.startsWith('video/') || isVideoExtension(incomingFileData.name)) {
+                    videoPreview.src = blobUrl;
+                    previewContainer.classList.remove('hidden');
+                } else {
+                    previewContainer.classList.add('hidden');
+                }
+
+                // Download Link
+                downloadLink.href = blobUrl;
+                downloadLink.download = incomingFileData.name;
+
+                // Auto Download Trigger
+                if (autoDownloadToggle.checked) {
+                    const tempAnchor = document.createElement('a');
+                    tempAnchor.href = blobUrl;
+                    tempAnchor.download = incomingFileData.name;
+                    document.body.appendChild(tempAnchor);
+                    tempAnchor.click();
+                    document.body.removeChild(tempAnchor);
+                }
+            }
+        }
+
+        // Helper Utility Functions
+        function formatBytes(bytes, decimals = 2) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const dm = decimals < 0 ? 0 : decimals;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+        }
+
+        function isVideoExtension(filename) {
+            const ext = filename.split('.').pop().toLowerCase();
+            return ['mp4', 'mov', 'm4v', 'webm', 'mkv', 'avi'].includes(ext);
+        }
+    </script>
+</body>
+</html>
